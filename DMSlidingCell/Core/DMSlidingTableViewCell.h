@@ -19,6 +19,14 @@
 
 #import <UIKit/UIKit.h>
 
+@protocol DMSlidingTableViewCellDelegate <NSObject>
+
+- (BOOL)slidingCellShouldAcceptSwipe;
+- (void)slidingCellStartedSliding;
+- (void)slidingCellStoppedSliding;
+
+@end
+
 enum {
     DMSlidingTableViewCellSwipeRight        = UISwipeGestureRecognizerDirectionRight,   // Reveal backgroundView only with a right swipe
     DMSlidingTableViewCellSwipeLeft         = UISwipeGestureRecognizerDirectionLeft,    // Reveal backgroundView only with a left swipe
@@ -42,6 +50,13 @@ typedef void (^DMSlidingTableViewCellEventHandler)(DMEventType eventType, BOOL b
 
 @property (readonly)            DMSlidingTableViewCellSwipe                 lastSwipeDirectionOccurred;     // Last swipe occurred
 @property (nonatomic,readonly)  BOOL                                        backgroundIsRevealed;           // YES if backgroundView is visible
+
+@property (nonatomic, weak) id <DMSlidingTableViewCellDelegate> delegate;
+
+@property (nonatomic) CGFloat shelfSize; // the minimum amount of contentView to remain visible
+@property (nonatomic) CGFloat cellBounce; // default is 20.0f
+@property (nonatomic) CGFloat slidingInAnimationDuration; // default is 0.2f
+@property (nonatomic) CGFloat slidingOutAnimationDuration; // default is 0.1f
 
 // Reveal or hide backgroundView
 - (void) setBackgroundVisible:(BOOL) revealBackgroundView;

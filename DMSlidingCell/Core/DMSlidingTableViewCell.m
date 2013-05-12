@@ -20,16 +20,16 @@
 
 #import "DMSlidingTableViewCell.h"
 
-#define kDMSlidingCellBounce            20.0f
-#define kDMSlidingInAnimationDuration   0.2f
-#define kDMSlidingOutAnimationDuration  0.1f
-
 @interface DMSlidingTableViewCell() {
     NSMutableArray*                     associatedSwipeRecognizer;
     DMSlidingTableViewCellSwipe         lastSwipeDirectionOccurred;
     DMSlidingTableViewCellEventHandler  eventHandler;
     BOOL                                isAnimating;
+    BOOL                                _isPanning;
 }
+
+@property (nonatomic, strong) UIPanGestureRecognizer *panGesture;
+@property (nonatomic, strong) UITapGestureRecognizer *tapGesture;
 
 - (UIGestureRecognizer *) swipeGestureRecognizerWithDirection:(UISwipeGestureRecognizerDirection) dir;
 - (void) setOffsetForView:(UIView *) targetView offset:(CGPoint) offset;
@@ -54,6 +54,10 @@
         self.backgroundView = defaultBackgroundView;
         
         self.swipeDirection = DMSlidingTableViewCellSwipeRight;
+        self.cellBounce = 20.0f;
+        self.slidingInAnimationDuration = 0.2f;
+        self.slidingOutAnimationDuration = 0.1f;
+
     }
     return self;
 }
@@ -72,21 +76,32 @@
         
         [self addGestureRecognizer:[self swipeGestureRecognizerWithDirection:
                                     UISwipeGestureRecognizerDirectionRight]];
+
+        self.panGesture =
+        [[UIPanGestureRecognizer alloc]
+         initWithTarget:self
+         action:@selector(handlePan:)];
+        _panGesture.delegate = self;
+
+        [self addGestureRecognizer:_panGesture];
     }
 }
 
 - (UIGestureRecognizer *) swipeGestureRecognizerWithDirection:(UISwipeGestureRecognizerDirection) dir {
     UISwipeGestureRecognizer *swipeG = [[UISwipeGestureRecognizer alloc] initWithTarget:self
                                                                                  action:@selector(handleSwipeGesture:)];
+    swipeG.delegate = self;
     swipeG.direction = dir;
     return swipeG;
 }
 
 
 - (void)handleSwipeGesture:(UISwipeGestureRecognizer *) gesture {
-    if (isAnimating)
+
+    if (isAnimating || _isPanning || [_delegate slidingCellShouldAcceptSwipe] == NO)
         return;
-    
+
+    NSLog(@"%s", __PRETTY_FUNCTION__);
     UISwipeGestureRecognizerDirection directionMade = gesture.direction;
     UISwipeGestureRecognizerDirection activeSwipe = self.swipeDirection;
 
@@ -136,16 +151,16 @@
 - (void) setBackgroundVisible:(BOOL) revealBackgroundView {
     if (isAnimating) return;
     CGFloat offset_x = 0.0f;
-    CGFloat bounce_distance = kDMSlidingCellBounce;
+    CGFloat bounce_distance = self.cellBounce;
     CGFloat contentViewWidth = self.contentView.frame.size.width;
 
     UISwipeGestureRecognizerDirection swipeMade = lastSwipeDirectionOccurred;
     if (swipeMade == UISwipeGestureRecognizerDirectionLeft) {
         offset_x = (revealBackgroundView ? -contentViewWidth : contentViewWidth);
-        bounce_distance = (revealBackgroundView ? 0.0f : kDMSlidingCellBounce);
+        bounce_distance = (revealBackgroundView ? 0.0f : self.cellBounce);
     } else if (swipeMade == UISwipeGestureRecognizerDirectionRight) {
         offset_x = (revealBackgroundView ? contentViewWidth : - contentViewWidth);
-        bounce_distance = (revealBackgroundView ? 0.0f : -kDMSlidingCellBounce);
+        bounce_distance = (revealBackgroundView ? 0.0f : -self.cellBounce);
     }
     
     if (eventHandler)
@@ -153,55 +168,164 @@
     
     isAnimating = YES;
     if (revealBackgroundView) {
-        [UIView animateWithDuration:kDMSlidingInAnimationDuration
-                              delay:0.0f
-                            options:UIViewAnimationOptionCurveEaseOut
-                         animations:^{
-                             [self setOffsetForView:self.contentView offset:CGPointMake(offset_x, 0.0f)];
-                         } completion:^(BOOL finished) {
-                             if (finished) {
-                                 isAnimating = NO;
-                                 if (eventHandler)
-                                     eventHandler(DMEventTypeDidOccurr,revealBackgroundView,lastSwipeDirectionOccurred);
-                             }
-                             
-                         }];
+        [UIView
+         animateWithDuration:self.slidingInAnimationDuration
+         delay:0.0f
+         options:UIViewAnimationOptionCurveEaseOut
+         animations:^{
+             [self setOffsetForView:self.contentView offset:CGPointMake(offset_x, 0.0f)];
+         } completion:^(BOOL finished) {
+             if (finished) {
+                 isAnimating = NO;
+                 [_delegate slidingCellStoppedSliding];
+
+                 if (_shelfSize > 0.0f) {
+                     self.tapGesture =
+                     [[UITapGestureRecognizer alloc]
+                      initWithTarget:self
+                      action:@selector(handleTap:)];
+                     [self.contentView addGestureRecognizer:_tapGesture];
+                 }
+                 if (eventHandler)
+                     eventHandler(DMEventTypeDidOccurr,revealBackgroundView,lastSwipeDirectionOccurred);
+             }
+         }];
     } else {
-        [UIView animateWithDuration:kDMSlidingOutAnimationDuration
-                              delay:0.0f
-                            options:(UIViewAnimationOptionCurveEaseOut|UIViewAnimationOptionAllowUserInteraction)
-                         animations:^{
-                             [self setOffsetForView:self.contentView offset:CGPointMake(offset_x, 0.0f)];
-                         } completion:^(BOOL finished) {
-                            [UIView animateWithDuration:kDMSlidingOutAnimationDuration
-                                                  delay:0
-                                                options:UIViewAnimationCurveLinear
-                                             animations:^{
-                                                 [self setOffsetForView:self.contentView
-                                                                    offset:CGPointMake(bounce_distance, 0.0f)];
-                                             } completion:^(BOOL finished) {
-                                                 [UIView animateWithDuration:kDMSlidingOutAnimationDuration
-                                                                       delay:0.0f
-                                                                     options:UIViewAnimationCurveLinear
-                                                                  animations:^{
-                                                                       
-                                                                   } completion:^(BOOL finished) {
-                                                                       [self setOffsetForView:self.contentView
-                                                                                       offset:CGPointMake(-bounce_distance, 0.0f)];
-                                                                       
-                                                                        if (eventHandler)
-                                                                            eventHandler(DMEventTypeDidOccurr,revealBackgroundView,lastSwipeDirectionOccurred);
-                                                                     
-                                                                       if (finished)
-                                                                           isAnimating = NO;
-                                                                   }];
-                                              }];
-                         }];
+        [UIView
+         animateWithDuration:self.slidingOutAnimationDuration
+         delay:0.0f
+         options:(UIViewAnimationOptionCurveEaseOut|UIViewAnimationOptionAllowUserInteraction)
+         animations:^{
+             [self setOffsetForView:self.contentView offset:CGPointMake(offset_x, 0.0f)];
+         } completion:^(BOOL finished) {
+             [UIView
+              animateWithDuration:self.slidingOutAnimationDuration
+              delay:0
+              options:UIViewAnimationCurveLinear
+              animations:^{
+                  [self setOffsetForView:self.contentView
+                                  offset:CGPointMake(bounce_distance, 0.0f)];
+              } completion:^(BOOL finished) {
+                  [UIView
+                   animateWithDuration:self.slidingOutAnimationDuration
+                   delay:0.0f
+                   options:UIViewAnimationCurveLinear
+                   animations:^{
+
+                   } completion:^(BOOL finished) {
+                       [self setOffsetForView:self.contentView
+                                       offset:CGPointMake(-bounce_distance, 0.0f)];
+
+                       if (eventHandler)
+                           eventHandler(DMEventTypeDidOccurr,revealBackgroundView,lastSwipeDirectionOccurred);
+
+                       if (finished) {
+                           isAnimating = NO;
+                           [self.contentView removeGestureRecognizer:_tapGesture];
+                           self.tapGesture = nil;
+                           [_delegate slidingCellStoppedSliding];
+                       }
+
+                   }];
+              }];
+         }];
     }
 }
 
+- (void)handlePan:(UIPanGestureRecognizer *)gesture {
+
+    if ([_delegate slidingCellShouldAcceptSwipe] == NO) return;
+
+    switch (gesture.state) {
+        case UIGestureRecognizerStateBegan:
+            [_delegate slidingCellStartedSliding];
+            _isPanning = YES;
+
+        case UIGestureRecognizerStateChanged: {
+
+            CGPoint translation =
+            [gesture translationInView:gesture.view];
+
+            [self
+             setOffsetForView:self.contentView
+             offset:CGPointMake(translation.x, 0.0f)];
+
+            [gesture
+             setTranslation:CGPointMake(0.0f, 0.0f)
+             inView:gesture.view];
+
+        } break;
+
+        default: {
+
+            static CGFloat const velocityThreshold = 1000.0f;
+
+            CGPoint velocity = [gesture velocityInView:gesture.view];
+
+            CGFloat minX = CGRectGetMinX(self.contentView.frame);
+
+            if (minX > 0) {
+
+                if (velocity.x > 0.0f) {
+                    lastSwipeDirectionOccurred = UISwipeGestureRecognizerDirectionRight;
+                }
+
+                BOOL visible =
+                velocity.x > 0.0f &&
+                (minX > .25*CGRectGetWidth(self.contentView.frame) ||
+                velocity.x > -velocityThreshold);
+
+                [self setBackgroundVisible:visible];
+
+            } else if (minX < 0) {
+
+                if (velocity.x < 0.0f) {
+                    lastSwipeDirectionOccurred = UISwipeGestureRecognizerDirectionLeft;
+                }
+
+                BOOL visible =
+                velocity.x < 0.0f &&
+                (minX < .25*CGRectGetWidth(self.contentView.frame) ||
+                velocity.x < -velocityThreshold);
+
+                [self setBackgroundVisible:visible];
+            } else {
+                [_delegate slidingCellStoppedSliding];
+            }
+
+            _isPanning = NO;
+
+        } break;
+    }
+}
+
+- (void)handleTap:(UITapGestureRecognizer *)gesture {
+    [self setBackgroundVisible:NO];
+}
+
 - (void) setOffsetForView:(UIView *) targetView offset:(CGPoint) offset {
-    targetView.frame = CGRectOffset(targetView.frame, offset.x, offset.y);
+
+    CGRect frame = CGRectOffset(targetView.frame, offset.x, offset.y);
+    CGFloat minX = CGRectGetMinX(self.contentView.frame);
+
+    if (minX > 0) {
+
+        frame.origin.x = MAX(0.0f, frame.origin.x);
+
+        frame.origin.x = MIN(CGRectGetWidth(frame) - _shelfSize, frame.origin.x);
+
+    } else if (minX < 0) {
+
+        frame.origin.x = MIN(0.0f, frame.origin.x);
+
+        frame.origin.x = MAX( _shelfSize - CGRectGetWidth(frame), frame.origin.x);
+    }
+
+    targetView.frame = frame;
+}
+
+- (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer shouldRecognizeSimultaneouslyWithGestureRecognizer:(UIGestureRecognizer *)otherGestureRecognizer {
+    return YES;
 }
 
 @end

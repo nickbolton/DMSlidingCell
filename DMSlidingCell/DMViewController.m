@@ -13,6 +13,7 @@
     IBOutlet    UITableView* mainTableView;
     IBOutlet    UISwitch*   resetStateOnScrolling;
     NSMutableIndexSet*      revealedCells;
+    BOOL _swipeEnabled;
 }
 - (IBAction)btn_toggleManually:(id)sender;
 - (IBAction)btn_webSite:(id)sender;
@@ -26,6 +27,8 @@
 {
     [super viewDidLoad];
     revealedCells= [[NSMutableIndexSet alloc] init];
+
+    _swipeEnabled = YES;
     
 	// Do any additional setup after loading the view, typically from a nib.
 }
@@ -69,8 +72,30 @@
 /** Any swiped cell should be reset when we start to scroll. */
 - (void)scrollViewWillBeginDragging:(UIScrollView *)scrollView
 {
+    NSLog(@"%s", __PRETTY_FUNCTION__);
+
     if (resetStateOnScrolling.isOn)
         [self resetCellsState];
+}
+
+- (void)scrollViewDidScroll:(UIScrollView *)scrollView {
+    _swipeEnabled = NO;
+}
+
+- (void)scrollViewDidEndDecelerating:(UIScrollView *)scrollView {
+    _swipeEnabled = YES;
+}
+
+- (BOOL)slidingCellShouldAcceptSwipe {
+    return _swipeEnabled;
+}
+
+- (void)slidingCellStartedSliding {
+    mainTableView.scrollEnabled = NO;
+}
+
+- (void)slidingCellStoppedSliding {
+    mainTableView.scrollEnabled = YES;
 }
 
 - (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath {
@@ -91,6 +116,8 @@
                                              reuseIdentifier:identifier];
         cell.swipeDirection = DMSlidingTableViewCellSwipeBoth;
         cell.selectionStyle = UITableViewCellSelectionStyleNone;
+        cell.delegate = self;
+        cell.shelfSize = 40.0f;
     }
     
     cell.eventHandler = ^(DMEventType eventType, BOOL backgroundRevealed, DMSlidingTableViewCellSwipe swipeDirection) {
