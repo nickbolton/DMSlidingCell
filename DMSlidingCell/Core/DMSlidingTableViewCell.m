@@ -98,7 +98,7 @@
 
 - (void)handleSwipeGesture:(UISwipeGestureRecognizer *) gesture {
 
-    if (isAnimating || _isPanning || [_delegate slidingCellShouldAcceptSwipe] == NO)
+    if (isAnimating || _isPanning || [_delegate slidingCellShouldAcceptSwipe:self] == NO)
         return;
 
     NSLog(@"%s", __PRETTY_FUNCTION__);
@@ -177,7 +177,7 @@
          } completion:^(BOOL finished) {
              if (finished) {
                  isAnimating = NO;
-                 [_delegate slidingCellStoppedSliding];
+                 [_delegate slidingCellStoppedSliding:self];
 
                  if (_shelfSize > 0.0f) {
                      self.tapGesture =
@@ -191,13 +191,20 @@
              }
          }];
     } else {
+
+        if (eventHandler)
+            eventHandler(DMEventTypeWillOccurr,revealBackgroundView,lastSwipeDirectionOccurred);
+
         [UIView
          animateWithDuration:self.slidingOutAnimationDuration
          delay:0.0f
          options:(UIViewAnimationOptionCurveEaseOut|UIViewAnimationOptionAllowUserInteraction)
          animations:^{
-             [self setOffsetForView:self.contentView offset:CGPointMake(offset_x, 0.0f)];
+             CGRect frame = self.contentView.frame;
+             frame.origin.x = 0.0f;
+             self.contentView.frame = frame;
          } completion:^(BOOL finished) {
+
              [UIView
               animateWithDuration:self.slidingOutAnimationDuration
               delay:0
@@ -223,7 +230,7 @@
                            isAnimating = NO;
                            [self.contentView removeGestureRecognizer:_tapGesture];
                            self.tapGesture = nil;
-                           [_delegate slidingCellStoppedSliding];
+                           [_delegate slidingCellStoppedSliding:self];
                        }
 
                    }];
@@ -234,25 +241,37 @@
 
 - (void)handlePan:(UIPanGestureRecognizer *)gesture {
 
-    if ([_delegate slidingCellShouldAcceptSwipe] == NO) return;
+    if ([_delegate slidingCellShouldAcceptSwipe:self] == NO) return;
 
     switch (gesture.state) {
         case UIGestureRecognizerStateBegan:
-            [_delegate slidingCellStartedSliding];
-            _isPanning = YES;
-
         case UIGestureRecognizerStateChanged: {
 
             CGPoint translation =
             [gesture translationInView:gesture.view];
 
-            [self
-             setOffsetForView:self.contentView
-             offset:CGPointMake(translation.x, 0.0f)];
+            if (_isPanning) {
 
-            [gesture
-             setTranslation:CGPointMake(0.0f, 0.0f)
-             inView:gesture.view];
+                [self
+                 setOffsetForView:self.contentView
+                 offset:CGPointMake(translation.x, 0.0f)];
+
+                CGFloat percentOpen =
+                (CGRectGetMinX(self.contentView.frame) / (CGRectGetWidth(self.contentView.frame) - _shelfSize));
+
+                [_delegate slidingCellPanning:self percentOpen:percentOpen];
+
+                [gesture
+                 setTranslation:CGPointMake(0.0f, 0.0f)
+                 inView:gesture.view];
+
+            } else {
+
+                if (fabs(translation.x) >= _panningThreshold) {
+                    [_delegate slidingCellStartedSliding:self];
+                    _isPanning = YES;
+                }
+            }
 
         } break;
 
@@ -290,7 +309,7 @@
 
                 [self setBackgroundVisible:visible];
             } else {
-                [_delegate slidingCellStoppedSliding];
+                [_delegate slidingCellStoppedSliding:self];
             }
 
             _isPanning = NO;
@@ -306,22 +325,26 @@
 - (void) setOffsetForView:(UIView *) targetView offset:(CGPoint) offset {
 
     CGRect frame = CGRectOffset(targetView.frame, offset.x, offset.y);
-    CGFloat minX = CGRectGetMinX(self.contentView.frame);
+    CGFloat minX = CGRectGetMinX(frame);
 
-    if (minX > 0) {
+    if ((swipeDirection == DMSlidingTableViewCellSwipeBoth ||
+         swipeDirection == DMSlidingTableViewCellSwipeRight) && minX > 0) {
 
         frame.origin.x = MAX(0.0f, frame.origin.x);
 
         frame.origin.x = MIN(CGRectGetWidth(frame) - _shelfSize, frame.origin.x);
 
-    } else if (minX < 0) {
+        targetView.frame = frame;
+
+    } else if ((swipeDirection == DMSlidingTableViewCellSwipeBoth ||
+                swipeDirection == DMSlidingTableViewCellSwipeLeft) && minX < 0) {
 
         frame.origin.x = MIN(0.0f, frame.origin.x);
 
         frame.origin.x = MAX( _shelfSize - CGRectGetWidth(frame), frame.origin.x);
-    }
 
-    targetView.frame = frame;
+        targetView.frame = frame;
+    }
 }
 
 - (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer shouldRecognizeSimultaneouslyWithGestureRecognizer:(UIGestureRecognizer *)otherGestureRecognizer {

@@ -19,11 +19,15 @@
 
 #import <UIKit/UIKit.h>
 
+@class DMSlidingTableViewCell;
+
 @protocol DMSlidingTableViewCellDelegate <NSObject>
 
-- (BOOL)slidingCellShouldAcceptSwipe;
-- (void)slidingCellStartedSliding;
-- (void)slidingCellStoppedSliding;
+- (BOOL)slidingCellShouldAcceptSwipe:(DMSlidingTableViewCell *)cell;
+- (void)slidingCellStartedSliding:(DMSlidingTableViewCell *)cell;
+- (void)slidingCellStoppedSliding:(DMSlidingTableViewCell *)cell;
+- (void)slidingCellPanning:(DMSlidingTableViewCell *)cell
+               percentOpen:(CGFloat)percentOpen;
 
 @end
 
@@ -57,6 +61,7 @@ typedef void (^DMSlidingTableViewCellEventHandler)(DMEventType eventType, BOOL b
 @property (nonatomic) CGFloat cellBounce; // default is 20.0f
 @property (nonatomic) CGFloat slidingInAnimationDuration; // default is 0.2f
 @property (nonatomic) CGFloat slidingOutAnimationDuration; // default is 0.1f
+@property (nonatomic) CGFloat panningThreshold; // the minimum amount of translation before panning begins. default is 0.0f
 
 // Reveal or hide backgroundView
 - (void) setBackgroundVisible:(BOOL) revealBackgroundView;
