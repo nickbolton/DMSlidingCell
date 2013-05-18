@@ -62,6 +62,17 @@
     return self;
 }
 
+- (void)prepareForReuse {
+    [super prepareForReuse];
+    [self resetCell];
+}
+
+- (void)resetCell {
+    CGRect frame = self.contentView.frame;
+    frame.origin.x = 0.0f;
+    self.contentView.frame = frame;
+}
+
 - (void) setSwipeDirection:(DMSlidingTableViewCellSwipe)newSwipeDirection {
     if (newSwipeDirection == swipeDirection) return;
     NSArray* loadedGestures = [self gestureRecognizers];
@@ -124,11 +135,11 @@
     BOOL canHide = (self.backgroundIsRevealed && directionMade != activeSwipe);
     
     if (canRevealBack){
-        [self setBackgroundVisible:YES];
+        [self setBackgroundVisible:YES animated:YES completion:nil];
         // save user's last swipe direction
         lastSwipeDirectionOccurred = directionMade;
     } else if (canHide) {
-        [self setBackgroundVisible:NO];
+        [self setBackgroundVisible:NO animated:YES completion:nil];
         if (self.swipeDirection == DMSlidingTableViewCellSwipeBoth)
             lastSwipeDirectionOccurred = DMSlidingTableViewCellSwipeNone;
     }
@@ -138,18 +149,25 @@
     if (lastSwipeDirectionOccurred == DMSlidingTableViewCellSwipeNone)
         return NO;
 
-    [self setBackgroundVisible:(self.backgroundIsRevealed ? NO : YES)];
+    [self
+     setBackgroundVisible:(self.backgroundIsRevealed ? NO : YES)
+     animated:YES
+     completion:nil];
+    
     return YES;
 }
 
 - (BOOL) backgroundIsRevealed {
     // Return YES if cell's contentView is not visible (backgroundView is revealed)
     return (self.contentView.frame.origin.x < 0 ||
-            self.contentView.frame.origin.x >= self.contentView.frame.size.width);
+            self.contentView.frame.origin.x >= (CGRectGetWidth(self.contentView.frame) - _shelfSize));
 }
 
-- (void) setBackgroundVisible:(BOOL) revealBackgroundView {
-    if (isAnimating) return;
+- (void)setBackgroundVisible:(BOOL)revealBackgroundView
+                    animated:(BOOL)animated
+                  completion:(void(^)(void))userCompletionBlock {
+
+    if (animated && isAnimating) return;
     CGFloat offset_x = 0.0f;
     CGFloat bounce_distance = self.cellBounce;
     CGFloat contentViewWidth = self.contentView.frame.size.width;
@@ -168,74 +186,114 @@
     
     isAnimating = YES;
     if (revealBackgroundView) {
-        [UIView
-         animateWithDuration:self.slidingInAnimationDuration
-         delay:0.0f
-         options:UIViewAnimationOptionCurveEaseOut
-         animations:^{
-             [self setOffsetForView:self.contentView offset:CGPointMake(offset_x, 0.0f)];
-         } completion:^(BOOL finished) {
-             if (finished) {
-                 isAnimating = NO;
-                 [_delegate slidingCellStoppedSliding:self];
 
-                 if (_shelfSize > 0.0f) {
-                     self.tapGesture =
-                     [[UITapGestureRecognizer alloc]
-                      initWithTarget:self
-                      action:@selector(handleTap:)];
-                     [self.contentView addGestureRecognizer:_tapGesture];
-                 }
-                 if (eventHandler)
-                     eventHandler(DMEventTypeDidOccurr,revealBackgroundView,lastSwipeDirectionOccurred);
-             }
-         }];
+        void (^animationBlock)(void) = ^{
+            [self setOffsetForView:self.contentView offset:CGPointMake(offset_x, 0.0f)];
+	    };
+
+        void (^completionBlock)(BOOL finished) = ^(BOOL finished) {
+            if (finished) {
+                isAnimating = NO;
+                [_delegate slidingCellStoppedSliding:self];
+
+                if (_shelfSize > 0.0f) {
+                    self.tapGesture =
+                    [[UITapGestureRecognizer alloc]
+                     initWithTarget:self
+                     action:@selector(handleTap:)];
+                    [self.contentView addGestureRecognizer:_tapGesture];
+                }
+                if (eventHandler)
+                    eventHandler(DMEventTypeDidOccurr,revealBackgroundView,lastSwipeDirectionOccurred);
+
+                if (userCompletionBlock != nil) {
+                    userCompletionBlock();
+                }
+            }
+	    };
+
+        if (animated) {
+            [UIView
+             animateWithDuration:self.slidingInAnimationDuration
+             delay:0.0f
+             options:UIViewAnimationOptionCurveEaseOut
+             animations:animationBlock
+             completion:completionBlock];
+        } else {
+            animationBlock();
+            completionBlock(YES);
+        }
+
     } else {
 
         if (eventHandler)
             eventHandler(DMEventTypeWillOccurr,revealBackgroundView,lastSwipeDirectionOccurred);
 
-        [UIView
-         animateWithDuration:self.slidingOutAnimationDuration
-         delay:0.0f
-         options:(UIViewAnimationOptionCurveEaseOut|UIViewAnimationOptionAllowUserInteraction)
-         animations:^{
-             CGRect frame = self.contentView.frame;
-             frame.origin.x = 0.0f;
-             self.contentView.frame = frame;
-         } completion:^(BOOL finished) {
+        void (^animationBlock)(void) = ^{
+            CGRect frame = self.contentView.frame;
+            frame.origin.x = 0.0f;
+            self.contentView.frame = frame;
+	    };
 
-             [UIView
-              animateWithDuration:self.slidingOutAnimationDuration
-              delay:0
-              options:UIViewAnimationCurveLinear
-              animations:^{
-                  [self setOffsetForView:self.contentView
-                                  offset:CGPointMake(bounce_distance, 0.0f)];
-              } completion:^(BOOL finished) {
-                  [UIView
-                   animateWithDuration:self.slidingOutAnimationDuration
-                   delay:0.0f
-                   options:UIViewAnimationCurveLinear
-                   animations:^{
+        void (^completionBlock)(BOOL finished) = ^(BOOL finished) {
 
-                   } completion:^(BOOL finished) {
-                       [self setOffsetForView:self.contentView
-                                       offset:CGPointMake(-bounce_distance, 0.0f)];
+            void (^innerCompletionBlock)(BOOL finished) = ^(BOOL finished) {
+                if (eventHandler)
+                    eventHandler(DMEventTypeDidOccurr,revealBackgroundView,lastSwipeDirectionOccurred);
 
-                       if (eventHandler)
-                           eventHandler(DMEventTypeDidOccurr,revealBackgroundView,lastSwipeDirectionOccurred);
+                if (finished) {
+                    isAnimating = NO;
+                    [self.contentView removeGestureRecognizer:_tapGesture];
+                    self.tapGesture = nil;
+                    [_delegate slidingCellStoppedSliding:self];
+                }
 
-                       if (finished) {
-                           isAnimating = NO;
-                           [self.contentView removeGestureRecognizer:_tapGesture];
-                           self.tapGesture = nil;
-                           [_delegate slidingCellStoppedSliding:self];
-                       }
+                if (userCompletionBlock != nil) {
+                    userCompletionBlock();
+                }
+            };
 
-                   }];
-              }];
-         }];
+            if (animated) {
+                [UIView
+                 animateWithDuration:self.slidingOutAnimationDuration
+                 delay:0
+                 options:UIViewAnimationCurveLinear
+                 animations:^{
+                     [self setOffsetForView:self.contentView
+                                     offset:CGPointMake(bounce_distance, 0.0f)];
+                 } completion:^(BOOL finished) {
+
+
+                     [UIView
+                      animateWithDuration:self.slidingOutAnimationDuration
+                      delay:0.0f
+                      options:UIViewAnimationCurveLinear
+                      animations:^{
+
+                      } completion:^(BOOL finished) {
+                          [self setOffsetForView:self.contentView
+                                          offset:CGPointMake(-bounce_distance, 0.0f)];
+
+                          innerCompletionBlock(finished);
+                      }];
+                 }];
+                
+            } else {
+                innerCompletionBlock(YES);
+            }
+	    };
+
+        if (animated) {
+            [UIView
+             animateWithDuration:self.slidingOutAnimationDuration
+             delay:0.0f
+             options:(UIViewAnimationOptionCurveEaseOut|UIViewAnimationOptionAllowUserInteraction)
+             animations:animationBlock
+             completion:completionBlock];
+        } else {
+            animationBlock();
+            completionBlock(YES);
+        }
     }
 }
 
@@ -294,7 +352,7 @@
                 (minX > .25*CGRectGetWidth(self.contentView.frame) ||
                 velocity.x > -velocityThreshold);
 
-                [self setBackgroundVisible:visible];
+                [self setBackgroundVisible:visible animated:YES completion:nil];
 
             } else if (minX < 0) {
 
@@ -307,7 +365,7 @@
                 (minX < .25*CGRectGetWidth(self.contentView.frame) ||
                 velocity.x < -velocityThreshold);
 
-                [self setBackgroundVisible:visible];
+                [self setBackgroundVisible:visible animated:YES completion:nil];
             } else {
                 [_delegate slidingCellStoppedSliding:self];
             }
@@ -319,7 +377,7 @@
 }
 
 - (void)handleTap:(UITapGestureRecognizer *)gesture {
-    [self setBackgroundVisible:NO];
+    [self setBackgroundVisible:NO animated:YES completion:nil];
 }
 
 - (void) setOffsetForView:(UIView *) targetView offset:(CGPoint) offset {

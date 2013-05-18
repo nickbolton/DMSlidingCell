@@ -64,7 +64,11 @@ typedef void (^DMSlidingTableViewCellEventHandler)(DMEventType eventType, BOOL b
 @property (nonatomic) CGFloat panningThreshold; // the minimum amount of translation before panning begins. default is 0.0f
 
 // Reveal or hide backgroundView
-- (void) setBackgroundVisible:(BOOL) revealBackgroundView;
+- (void)setBackgroundVisible:(BOOL)revealBackgroundView
+                    animated:(BOOL)animated
+                  completion:(void(^)(void))completionBlock;
+
+- (void)resetCell;
 
 // Toggle backgroundView visibility by animating cell top view to set direction (works even if it's not allowed to swipeDirection, so be careful)
 - (BOOL) toggleCellStatus;
