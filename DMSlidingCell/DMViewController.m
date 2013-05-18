@@ -9,7 +9,7 @@
 #import "DMViewController.h"
 #import "DMSlidingTableViewCell.h"
 
-@interface DMViewController () <UITableViewDelegate> {
+@interface DMViewController () <UITableViewDelegate, DMSlidingTableViewCellDelegate> {
     IBOutlet    UITableView* mainTableView;
     IBOutlet    UISwitch*   resetStateOnScrolling;
     NSMutableIndexSet*      revealedCells;
