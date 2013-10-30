@@ -106,13 +106,17 @@
     return swipeG;
 }
 
+- (void)setEnabled:(BOOL)enabled {
+    _enabled = enabled;
+    _panGesture.enabled = enabled;
+    _tapGesture.enabled = enabled;
+}
 
 - (void)handleSwipeGesture:(UISwipeGestureRecognizer *) gesture {
 
-    if (isAnimating || _isPanning || [_delegate slidingCellShouldAcceptSwipe:self] == NO)
+    if (_enabled == NO || isAnimating || _isPanning || [_delegate slidingCellShouldAcceptSwipe:self] == NO)
         return;
 
-    NSLog(@"%s", __PRETTY_FUNCTION__);
     UISwipeGestureRecognizerDirection directionMade = gesture.direction;
     UISwipeGestureRecognizerDirection activeSwipe = self.swipeDirection;
 
@@ -145,15 +149,20 @@
     }
 }
 
-- (BOOL) toggleCellStatus {
+- (BOOL)toggleCellStatus {
+    return [self toggleCellStatusWithCompletion:nil];
+}
+
+- (BOOL)toggleCellStatusWithCompletion:(void(^)(void))completionBlock {
+
     if (lastSwipeDirectionOccurred == DMSlidingTableViewCellSwipeNone)
         return NO;
 
     [self
      setBackgroundVisible:(self.backgroundIsRevealed ? NO : YES)
      animated:YES
-     completion:nil];
-    
+     completion:completionBlock];
+
     return YES;
 }
 
@@ -167,7 +176,7 @@
                     animated:(BOOL)animated
                   completion:(void(^)(void))userCompletionBlock {
 
-    if (animated && isAnimating) return;
+    if ((animated && isAnimating) || (revealBackgroundView && _enabled == NO)) return;
     CGFloat offset_x = 0.0f;
     CGFloat bounce_distance = self.cellBounce;
     CGFloat contentViewWidth = self.contentView.frame.size.width;
@@ -299,7 +308,7 @@
 
 - (void)handlePan:(UIPanGestureRecognizer *)gesture {
 
-    if ([_delegate slidingCellShouldAcceptSwipe:self] == NO) return;
+    if (_enabled == NO || [_delegate slidingCellShouldAcceptSwipe:self] == NO) return;
 
     switch (gesture.state) {
         case UIGestureRecognizerStateBegan:

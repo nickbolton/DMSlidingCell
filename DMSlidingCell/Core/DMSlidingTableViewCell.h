@@ -49,10 +49,11 @@ typedef void (^DMSlidingTableViewCellEventHandler)(DMEventType eventType, BOOL b
     
 }
 
+@property (nonatomic, getter = isEnabled) BOOL enabled;
 @property (copy)                DMSlidingTableViewCellEventHandler          eventHandler;                   // Event delegate handler via blocks
 @property (nonatomic,assign)    DMSlidingTableViewCellSwipe                 swipeDirection;                 // Allowed swipe-to-reveal direction
 
-@property (readonly)            DMSlidingTableViewCellSwipe                 lastSwipeDirectionOccurred;     // Last swipe occurred
+@property (nonatomic)            DMSlidingTableViewCellSwipe                 lastSwipeDirectionOccurred;     // Last swipe occurred
 @property (nonatomic,readonly)  BOOL                                        backgroundIsRevealed;           // YES if backgroundView is visible
 
 @property (nonatomic, weak) id <DMSlidingTableViewCellDelegate> delegate;
@@ -72,5 +73,8 @@ typedef void (^DMSlidingTableViewCellEventHandler)(DMEventType eventType, BOOL b
 
 // Toggle backgroundView visibility by animating cell top view to set direction (works even if it's not allowed to swipeDirection, so be careful)
 - (BOOL) toggleCellStatus;
+
+- (BOOL)toggleCellStatusWithCompletion:(void(^)(void))completionBlock;
+
 
 @end
